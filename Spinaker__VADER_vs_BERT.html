@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Spinaker VADER vs BERT</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.5; }
+pre { background: #f6f8fa; padding: 12px; border-radius: 6px; overflow-x: auto; }
+code { font-family: Consolas, Monaco, monospace; }
+.markdown { margin: 24px 0 12px; }
+.cell { margin-bottom: 24px; }
+.output { background: #fffbea; padding: 10px; border-left: 4px solid #f0c36d; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+
+<div class="cell">
+<div class="markdown"><h1>Sentiment Analysis: VADER vs BERT</h1>
+<br>
+<p>This notebook compares two approaches to sentiment analysis:</p>
+<br>
+<p>- **VADER**: a rule-based sentiment analysis method</p>
+<p>- **BERT**: a transformer-based machine learning model</p>
+<br>
+<p>The goal is to show how different NLP methods interpret customer feedback, especially when the language is ambiguous, mixed, or contains negation.</p></div>
+</div>
+<div class="cell">
+<pre><code># Install the libraries needed for this notebook.
+#
+# vaderSentiment:
+# - provides the VADER sentiment analyzer
+# - VADER is a rule-based sentiment analysis tool
+#
+# transformers:
+# - provides access to pre-trained transformer models such as BERT
+# - these models are trained on large text datasets and can capture more complex language patterns
+#
+# pandas:
+# - helps us organize results in tables
+
+!pip install -q vaderSentiment transformers pandas</code></pre>
+<div class="output">[?25l   [90m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m [32m0.0/126.0 kB[0m [31m?[0m eta [36m-:--:--[0m[2K   [91m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m[90m╺[0m [32m122.9/126.0 kB[0m [31m7.1 MB/s[0m eta [36m0:00:01[0m[2K   [90m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m [32m126.0/126.0 kB[0m [31m3.1 MB/s[0m eta [36m0:00:00[0m
+[?25h</div>
+</div>
+<div class="cell">
+<pre><code># Import the libraries used in this notebook.
+#
+# pandas is used for creating and displaying tables.
+# SentimentIntensityAnalyzer is the VADER sentiment analyzer.
+# pipeline from transformers gives us an easy interface to use a pre-trained BERT model.
+
+import pandas as pd
+
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from transformers import pipeline</code></pre>
+</div>
+<div class="cell">
+<div class="markdown"><h2>Example customer reviews</h2>
+<br>
+<p>We start with a small set of customer reviews.</p>
+<br>
+<p>These examples represent short business texts that could come from surveys, online reviews, or customer support feedback.</p></div>
+</div>
+<div class="cell">
+<pre><code># This list contains example customer reviews.
+#
+# The reviews include:
+# - clearly positive feedback
+# - clearly negative feedback
+# - mixed feedback
+# - more neutral or factual statements
+#
+# Using different types of reviews helps us compare how VADER and BERT behave.
+
+reviews = [
+    &quot;The delivery was fast and the product quality was excellent.&quot;,
+    &quot;Customer support ignored my complaint for five days.&quot;,
+    &quot;The app is easy to use, but the payment screen crashes.&quot;,
+    &quot;The price is reasonable and checkout was smooth.&quot;,
+    &quot;I received the wrong invoice and nobody explained the problem.&quot;,
+    &quot;Premium support solved my issue in less than one hour.&quot;,
+    &quot;The package arrived late and the tracking information was unclear.&quot;,
+    &quot;The product is okay, but I expected better quality.&quot;,
+    &quot;I was charged twice for the same order.&quot;,
+    &quot;The chatbot gave helpful answers about my return request.&quot;
+]
+
+# We create a pandas DataFrame to store the reviews in a table.
+#
+# This makes it easier to display the text and later add sentiment results
+# from both models as additional columns.
+
+df = pd.DataFrame({&quot;review&quot;: reviews})
+
+# Display the dataset.
+
+df</code></pre>
+<div class="output">                                              review
+0  The delivery was fast and the product quality ...
+1  Customer support ignored my complaint for five...
+2  The app is easy to use, but the payment screen...
+3   The price is reasonable and checkout was smooth.
+4  I received the wrong invoice and nobody explai...
+5  Premium support solved my issue in less than o...
+6  The package arrived late and the tracking info...
+7  The product is okay, but I expected better qua...
+8            I was charged twice for the same order.
+9  The chatbot gave helpful answers about my retu...</div>
+</div>
+<div class="cell">
+<div class="markdown"><h2>VADER sentiment analysis</h2>
+<br>
+<p>VADER is a rule-based model.</p>
+<br>
+<p>It uses a dictionary of words and manually designed rules to estimate whether text is positive, negative, or neutral.</p></div>
+</div>
+<div class="cell">
+<pre><code># Create a VADER sentiment analyzer.
+#
+# VADER does not need training in this notebook.
+# It already contains a built-in sentiment lexicon and rules.
+
+vader = SentimentIntensityAnalyzer()</code></pre>
+</div>
+<div class="cell">
+<pre><code># This helper function converts VADER&#x27;s numerical compound score into a label.
+#
+# VADER returns several scores:
+# - positive
+# - neutral
+# - negative
+# - compound
+#
+# The compound score is the most commonly used summary score.
+# It ranges approximately from -1 to +1:
+# - close to +1 means very positive
+# - close to -1 means very negative
+# - close to 0 means neutral or mixed sentiment
+
+def vader_label(text):
+
+    # Get VADER sentiment scores for one text.
+
+    score = vader.polarity_scores(text)[&quot;compound&quot;]
+
+    # Convert the numerical score into a human-readable label.
+    #
+    # These thresholds are commonly used with VADER:
+    # - compound &gt;= 0.05: positive
+    # - compound &lt;= -0.05: negative
+    # - otherwise: neutral
+
+    if score &gt;= 0.05:
+        return &quot;positive&quot;
+    elif score &lt;= -0.05:
+        return &quot;negative&quot;
+    else:
+        return &quot;neutral&quot;</code></pre>
+</div>
+<div class="cell">
+<pre><code># Apply VADER to every review in the dataset.
+#
+# We add two new columns:
+# - vader_compound: the numerical sentiment score
+# - vader_label: the interpreted sentiment category
+
+df[&quot;vader_compound&quot;] = df[&quot;review&quot;].apply(
+    lambda text: vader.polarity_scores(text)[&quot;compound&quot;]
+)
+
+df[&quot;vader_label&quot;] = df[&quot;review&quot;].apply(vader_label)
+
+# Display the reviews with VADER results.
+
+df[[&quot;review&quot;, &quot;vader_compound&quot;, &quot;vader_label&quot;]]</code></pre>
+<div class="output">                                              review  vader_compound  \
+0  The delivery was fast and the product quality ...          0.5719   
+1  Customer support ignored my complaint for five...         -0.2023   
+2  The app is easy to use, but the payment screen...          0.2382   
+3   The price is reasonable and checkout was smooth.          0.0000   
+4  I received the wrong invoice and nobody explai...         -0.7003   
+5  Premium support solved my issue in less than o...          0.5859   
+6  The package arrived late and the tracking info...         -0.2500   
+7  The product is okay, but I expected better qua...          0.6486   
+8            I was charged twice for the same order.         -0.2023   
+9  The chatbot gave helpful answers about my retu...          0.4215   
+
+  vader_label  
+0    positive  
+1    negative  
+2    positive  
+3     neutral  
+4    negative  
+5    positive  
+6    negative  
+7    positive  
+8    negative  
+9    positive  </div>
+</div>
+<div class="cell">
+<div class="markdown"><h2>BERT sentiment analysis</h2>
+<br>
+<p>Now we use a transformer-based model.</p>
+<br>
+<p>Unlike VADER, BERT-style models learn language patterns from large datasets instead of relying only on manually written rules.</p></div>
+</div>
+<div class="cell">
+<pre><code># Load a pre-trained sentiment analysis model using the transformers pipeline.
+#
+# This model returns star-based sentiment labels:
+# - 1 star usually means very negative
+# - 5 stars usually means very positive
+#
+# The model also returns a confidence score showing how confident it is
+# about its prediction.
+
+bert_sentiment = pipeline(
+    &quot;sentiment-analysis&quot;,
+    model=&quot;nlptown/bert-base-multilingual-uncased-sentiment&quot;
+)</code></pre>
+<div class="output">/usr/local/lib/python3.12/dist-packages/huggingface_hub/utils/_auth.py:112: UserWarning: 
+The secret `HF_TOKEN` does not exist in your Colab secrets.
+To authenticate with the Hugging Face Hub, create a token in your settings tab (https://huggingface.co/settings/tokens), set it as secret in your Google Colab and restart your session.
+You will be able to reuse this secret in all of your notebooks.
+Please note that authentication is recommended but still optional to access public models or datasets.
+  warnings.warn(
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+WARNING:huggingface_hub.utils._http:Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+</div>
+<div class="output">config.json:   0%|          | 0.00/953 [00:00&lt;?, ?B/s]</div>
+<div class="output">model.safetensors:   0%|          | 0.00/669M [00:00&lt;?, ?B/s]</div>
+<div class="output">Loading weights:   0%|          | 0/201 [00:00&lt;?, ?it/s]</div>
+<div class="output">tokenizer_config.json:   0%|          | 0.00/39.0 [00:00&lt;?, ?B/s]</div>
+<div class="output">vocab.txt:   0%|          | 0.00/872k [00:00&lt;?, ?B/s]</div>
+<div class="output">special_tokens_map.json:   0%|          | 0.00/112 [00:00&lt;?, ?B/s]</div>
+</div>
+<div class="cell">
+<pre><code># This helper function applies the BERT sentiment model to one text.
+#
+# The model returns a dictionary with:
+# - label: predicted sentiment rating, such as &quot;1 star&quot; or &quot;5 stars&quot;
+# - score: confidence of the prediction
+
+def bert_analyze(text):
+
+    # Run the model on one review.
+    #
+    # The pipeline returns a list of results.
+    # Since we analyze one text, we take the first result with [0].
+
+    result = bert_sentiment(text)[0]
+
+    # Return the model output.
+
+    return result</code></pre>
+</div>
+<div class="cell">
+<pre><code># Apply BERT sentiment analysis to every review.
+#
+# We first store the full model output in a temporary column.
+# Each output contains both the label and the confidence score.
+
+df[&quot;bert_result&quot;] = df[&quot;review&quot;].apply(bert_analyze)
+
+# Extract the star label from the BERT result.
+
+df[&quot;bert_label&quot;] = df[&quot;bert_result&quot;].apply(lambda x: x[&quot;label&quot;])
+
+# Extract the model confidence score from the BERT result.
+
+df[&quot;bert_confidence&quot;] = df[&quot;bert_result&quot;].apply(lambda x: x[&quot;score&quot;])
+
+# Display both VADER and BERT results side by side.
+
+df[[
+    &quot;review&quot;,
+    &quot;vader_label&quot;,
+    &quot;vader_compound&quot;,
+    &quot;bert_label&quot;,
+    &quot;bert_confidence&quot;
+]]</code></pre>
+<div class="output">                                              review vader_label  \
+0  The delivery was fast and the product quality ...    positive   
+1  Customer support ignored my complaint for five...    negative   
+2  The app is easy to use, but the payment screen...    positive   
+3   The price is reasonable and checkout was smooth.     neutral   
+4  I received the wrong invoice and nobody explai...    negative   
+5  Premium support solved my issue in less than o...    positive   
+6  The package arrived late and the tracking info...    negative   
+7  The product is okay, but I expected better qua...    positive   
+8            I was charged twice for the same order.    negative   
+9  The chatbot gave helpful answers about my retu...    positive   
+
+   vader_compound bert_label  bert_confidence  
+0          0.5719    5 stars         0.697050  
+1         -0.2023     1 star         0.493989  
+2          0.2382    3 stars         0.453161  
+3          0.0000    4 stars         0.534004  
+4         -0.7003     1 star         0.780130  
+5          0.5859    5 stars         0.616199  
+6         -0.2500     1 star         0.396406  
+7          0.6486    3 stars         0.805566  
+8         -0.2023     1 star         0.471394  
+9          0.4215    4 stars         0.307712  </div>
+</div>
+<div class="cell">
+<div class="markdown"><h2>Comparing VADER and BERT</h2>
+<br>
+<p>This section helps to compare the outputs of the two approaches.</p>
+<br>
+<p>The key idea is to ask whether the label makes sense from a human perspective.</p></div>
+</div>
+<div class="cell">
+<pre><code># Create a compact comparison table.
+#
+# This table makes it easier to compare:
+# - the original customer review
+# - VADER&#x27;s sentiment label
+# - VADER&#x27;s numerical compound score
+# - BERT&#x27;s star-based sentiment label
+# - BERT&#x27;s confidence score
+
+comparison = df[[
+    &quot;review&quot;,
+    &quot;vader_label&quot;,
+    &quot;vader_compound&quot;,
+    &quot;bert_label&quot;,
+    &quot;bert_confidence&quot;
+]]
+
+# Round numerical values for easier reading.
+
+comparison.round(3)</code></pre>
+<div class="output">                                              review vader_label  \
+0  The delivery was fast and the product quality ...    positive   
+1  Customer support ignored my complaint for five...    negative   
+2  The app is easy to use, but the payment screen...    positive   
+3   The price is reasonable and checkout was smooth.     neutral   
+4  I received the wrong invoice and nobody explai...    negative   
+5  Premium support solved my issue in less than o...    positive   
+6  The package arrived late and the tracking info...    negative   
+7  The product is okay, but I expected better qua...    positive   
+8            I was charged twice for the same order.    negative   
+9  The chatbot gave helpful answers about my retu...    positive   
+
+   vader_compound bert_label  bert_confidence  
+0           0.572    5 stars            0.697  
+1          -0.202     1 star            0.494  
+2           0.238    3 stars            0.453  
+3           0.000    4 stars            0.534  
+4          -0.700     1 star            0.780  
+5           0.586    5 stars            0.616  
+6          -0.250     1 star            0.396  
+7           0.649    3 stars            0.806  
+8          -0.202     1 star            0.471  
+9           0.422    4 stars            0.308  </div>
+</div>
+<div class="cell">
+<pre><code># Count how many reviews VADER classified as positive, negative, or neutral.
+#
+# This gives a simple summary of the rule-based model&#x27;s output.
+
+df[&quot;vader_label&quot;].value_counts()</code></pre>
+<div class="output">vader_label
+positive    5
+negative    4
+neutral     1
+Name: count, dtype: int64</div>
+</div>
+<div class="cell">
+<pre><code># Count how many reviews BERT assigned to each star category.
+#
+# This gives a simple summary of the transformer model&#x27;s output.
+
+df[&quot;bert_label&quot;].value_counts()</code></pre>
+<div class="output">bert_label
+1 star     4
+5 stars    2
+3 stars    2
+4 stars    2
+Name: count, dtype: int64</div>
+</div>
+<div class="cell">
+<div class="markdown"><h2>Testing negation and ambiguous language</h2>
+<br>
+<p>Sentiment analysis becomes more difficult when language includes:</p>
+<br>
+<p>- negation, such as &quot;not bad&quot;</p>
+<p>- mixed opinions, such as &quot;good product but slow delivery&quot;</p>
+<p>- ambiguous or subtle wording</p>
+<br>
+<p>This section tests how both models behave in such cases.</p></div>
+</div>
+<div class="cell">
+<pre><code># These examples are intentionally more difficult than simple positive or negative reviews.
+#
+# They include:
+# - negation
+# - mixed sentiment
+# - subtle wording
+# - sentences where positive and negative signals appear together
+
+challenging_reviews = [
+    &quot;The product is not bad.&quot;,
+    &quot;The service is not good.&quot;,
+    &quot;The delivery was late, but the product is excellent.&quot;,
+    &quot;I expected more from this product.&quot;,
+    &quot;The app is simple, but it crashes too often.&quot;,
+    &quot;I cannot say I am disappointed.&quot;,
+    &quot;This is not the worst experience I have had.&quot;,
+    &quot;The support team was helpful, although the process was slow.&quot;
+]
+
+# Store the challenging examples in a new DataFrame.
+
+challenge_df = pd.DataFrame({&quot;review&quot;: challenging_reviews})
+
+challenge_df</code></pre>
+<div class="output">                                              review
+0                            The product is not bad.
+1                           The service is not good.
+2  The delivery was late, but the product is exce...
+3                 I expected more from this product.
+4       The app is simple, but it crashes too often.
+5                    I cannot say I am disappointed.
+6       This is not the worst experience I have had.
+7  The support team was helpful, although the pro...</div>
+</div>
+<div class="cell">
+<pre><code># Apply VADER to the challenging examples.
+#
+# Again, we store:
+# - the compound score
+# - the interpreted positive/negative/neutral label
+
+challenge_df[&quot;vader_compound&quot;] = challenge_df[&quot;review&quot;].apply(
+    lambda text: vader.polarity_scores(text)[&quot;compound&quot;]
+)
+
+challenge_df[&quot;vader_label&quot;] = challenge_df[&quot;review&quot;].apply(vader_label)
+
+# Apply BERT to the same challenging examples.
+
+challenge_df[&quot;bert_result&quot;] = challenge_df[&quot;review&quot;].apply(bert_analyze)
+
+challenge_df[&quot;bert_label&quot;] = challenge_df[&quot;bert_result&quot;].apply(lambda x: x[&quot;label&quot;])
+challenge_df[&quot;bert_confidence&quot;] = challenge_df[&quot;bert_result&quot;].apply(lambda x: x[&quot;score&quot;])
+
+# Display both model outputs side by side.
+
+challenge_df[[
+    &quot;review&quot;,
+    &quot;vader_label&quot;,
+    &quot;vader_compound&quot;,
+    &quot;bert_label&quot;,
+    &quot;bert_confidence&quot;
+]].round(3)</code></pre>
+<div class="output">                                              review vader_label  \
+0                            The product is not bad.    positive   
+1                           The service is not good.    negative   
+2  The delivery was late, but the product is exce...    positive   
+3                 I expected more from this product.     neutral   
+4       The app is simple, but it crashes too often.     neutral   
+5                    I cannot say I am disappointed.    negative   
+6       This is not the worst experience I have had.    positive   
+7  The support team was helpful, although the pro...    positive   
+
+   vader_compound bert_label  bert_confidence  
+0           0.431    3 stars            0.454  
+1          -0.341     1 star            0.582  
+2           0.723    4 stars            0.441  
+3           0.000    3 stars            0.455  
+4           0.000    3 stars            0.430  
+5          -0.477    2 stars            0.414  
+6           0.510    2 stars            0.412  
+7           0.670    3 stars            0.506  </div>
+</div>
+<div class="cell">
+<div class="markdown"><h2>Single-sentence experiment</h2>
+<br>
+<p>This section allows to test one sentence at a time.</p></div>
+</div>
+<div class="cell">
+<pre><code># Choose one sentence to inspect in detail.
+#
+# then observe how VADER and BERT respond.
+
+sentence = &quot;The product is not bad.&quot;
+
+# Analyze the sentence with VADER.
+
+vader_scores = vader.polarity_scores(sentence)
+vader_sentiment = vader_label(sentence)
+
+# Analyze the sentence with BERT.
+
+bert_output = bert_sentiment(sentence)[0]
+
+# Print the results in a readable format.
+
+print(&quot;Sentence:&quot;)
+print(sentence)
+print()
+
+print(&quot;VADER result:&quot;)
+print(vader_scores)
+print(&quot;VADER label:&quot;, vader_sentiment)
+print()
+
+print(&quot;BERT result:&quot;)
+print(bert_output)</code></pre>
+<div class="output">Sentence:
+The product is not bad.
+
+VADER result:
+{&#x27;neg&#x27;: 0.0, &#x27;neu&#x27;: 0.584, &#x27;pos&#x27;: 0.416, &#x27;compound&#x27;: 0.431}
+VADER label: positive
+
+BERT result:
+{&#x27;label&#x27;: &#x27;3 stars&#x27;, &#x27;score&#x27;: 0.4535726308822632}
+</div>
+</div>
+<div class="cell">
+<div class="markdown"><h2>TASK: Sentiment analysis experiment</h2>
+<br>
+<p>Work in small groups.</p>
+<br>
+<h3>Step 1</h3>
+<p>Add 5 new customer reviews.</p>
+<br>
+<h3>Step 2</h3>
+<p>Run both VADER and BERT on your new examples.</p>
+<br>
+<h3>Step 3</h3>
+<p>Find at least one case where the two models disagree.</p>
+<br>
+<h3>Discussion</h3>
+<br>
+<p>1. Which model seems more reasonable for your examples?</p>
+<p>2. Which sentences were difficult to classify?</p>
+<p>3. Did negation cause problems?</p>
+<p>4. Did mixed sentiment cause problems?</p>
+<p>5. Which model would you choose for a real business application and why?</p></div>
+</div>
+</body></html>

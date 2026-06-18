@@ -1,0 +1,448 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Chatbots</title><style>body{font-family:Arial,sans-serif;max-width:1000px;margin:40px auto;line-height:1.5}pre{background:#f6f8fa;padding:14px;border-radius:6px;overflow-x:auto}code{font-family:Consolas,monospace}.markdown{margin:24px 0}.codecell{margin:20px 0}.output{background:#fff;border-left:4px solid #ccc;padding:8px 12px;white-space:pre-wrap}</style></head><body>
+<h1>Chatbots</h1>
+<div class="markdown"><h1>Rule-based FAQ chatbot</h1>
+<p>This section demonstrates the simplest possible chatbot logic: matching user questions to predefined answers using keywords.</p></div>
+<div class="codecell"><pre><code># We start with a simple FAQ dictionary.
+#
+# A dictionary stores information as key-value pairs:
+# - the key is a keyword that we expect to appear in a customer question
+# - the value is the answer that the chatbot should return
+#
+# This approach is very transparent and easy to understand.
+# However, it only works well when the user uses words that we have explicitly included as keys.
+
+faq = {
+    &quot;refund&quot;: &quot;Refunds are processed within 7 business days.&quot;,
+    &quot;delivery&quot;: &quot;Standard delivery takes 2-4 business days.&quot;,
+    &quot;invoice&quot;: &quot;Invoices are sent by email after payment confirmation.&quot;,
+    &quot;premium&quot;: &quot;Premium customers receive priority support within 2 hours.&quot;,
+    &quot;cancel&quot;: &quot;Orders can be cancelled within 24 hours of purchase.&quot;
+}</code></pre>
+</div>
+<div class="codecell"><pre><code># This is an example customer question.
+#
+# The question contains the word &quot;premium&quot;.
+# Because &quot;premium&quot; is one of the keys in the FAQ dictionary,
+# the rule-based chatbot should be able to find the correct answer.
+
+question = &quot;I am a premium customer. How fast will support answer?&quot;</code></pre>
+</div>
+<div class="codecell"><pre><code># We create a Boolean variable to remember whether the chatbot found an answer.
+#
+# At the beginning, no answer has been found yet, so the value is False.
+
+answer_found = False
+
+# The loop goes through every keyword-answer pair in the FAQ dictionary.
+#
+# Example:
+# keyword = &quot;refund&quot;
+# answer = &quot;Refunds are processed within 7 business days.&quot;
+
+for keyword, answer in faq.items():
+
+    # We convert the customer question to lowercase.
+    #
+    # This makes matching more robust:
+    # &quot;Premium&quot;, &quot;premium&quot;, and &quot;PREMIUM&quot; will be treated the same way.
+
+    if keyword in question.lower():
+
+        # If the keyword is found in the question,
+        # the chatbot prints the corresponding answer.
+
+        print(answer)
+
+        # We update the variable to show that an answer was found.
+
+        answer_found = True
+
+# If no keyword was found, the chatbot prints a generic fallback message.
+#
+# This fallback is important because otherwise the chatbot would simply return nothing.
+
+if not answer_found:
+    print(&quot;I do not have enough information. Please contact customer support.&quot;)</code></pre>
+<div class="output">Premium customers receive priority support within 2 hours.
+</div>
+</div>
+<div class="codecell"><pre><code># Now we test the rule-based chatbot on several different customer questions.
+#
+# This helps us demonstrate both:
+# - cases where keyword matching works
+# - cases where keyword matching fails
+
+test_questions = [
+    &quot;How long does delivery take?&quot;,        # matches because it contains &quot;delivery&quot;
+    &quot;Can I get a refund?&quot;,                 # matches because it contains &quot;refund&quot;
+    &quot;When will my package arrive?&quot;         # no match because &quot;package&quot; is not an FAQ key
+]
+
+# We process every test question one by one.
+
+for question in test_questions:
+
+    # Again, we start by assuming that no answer has been found.
+
+    matched = False
+
+    # We compare the question with every keyword in the FAQ dictionary.
+
+    for key, answer in faq.items():
+
+        # If the keyword appears in the question,
+        # we print the question and the matching answer.
+
+        if key in question.lower():
+            print(f&quot;{question}&quot;)
+            print(f&quot;{answer}\n&quot;)
+
+            # We mark the question as successfully matched.
+
+            matched = True
+
+            # We stop checking other keywords,
+            # because we already found a relevant answer.
+
+            break
+
+    # If no keyword matched, we show that the rule-based approach failed.
+
+    if not matched:
+        print(f&quot;{question}&quot;)
+        print(&quot;No answer found - keyword matching failed!\n&quot;)</code></pre>
+<div class="output">How long does delivery take?
+Standard delivery takes 2-4 business days.
+
+Can I get a refund?
+Refunds are processed within 7 business days.
+
+When will my package arrive?
+No answer found - keyword matching failed!
+
+</div>
+</div>
+<div class="codecell"><pre><code># This is exactly why we need embeddings-based search.
+#
+# The question &quot;When will my package arrive?&quot; is related to delivery,
+# but it does not use the word &quot;delivery&quot;.
+#
+# A keyword-based chatbot cannot understand this semantic connection.
+# An embeddings-based chatbot can compare meanings, not only words.</code></pre>
+</div>
+<div class="markdown"><h1>Better chatbot with embeddings</h1>
+<p>This section demonstrates a more flexible chatbot that searches by meaning rather than exact keywords.</p></div>
+<div class="codecell"><pre><code># We import the tools needed for semantic search.
+#
+# SentenceTransformer:
+# - converts text into embeddings
+# - embeddings are numerical representations of meaning
+#
+# cosine_similarity:
+# - compares embeddings
+# - higher similarity means that two texts are closer in meaning
+#
+# pandas:
+# - useful for displaying and organizing results
+
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+import pandas as pd</code></pre>
+</div>
+<div class="codecell"><pre><code># The knowledge base contains full answers that the chatbot can choose from.
+#
+# Unlike the earlier FAQ dictionary, this knowledge base does not rely on short keywords.
+# Each entry is a complete sentence representing a possible answer.
+
+knowledge_base = [
+    &quot;Refunds are processed within 7 business days.&quot;,
+    &quot;Standard delivery takes 2-4 business days.&quot;,
+    &quot;Invoices are sent by email after payment confirmation.&quot;,
+    &quot;Premium customers receive priority support within 2 hours.&quot;,
+    &quot;Orders can be cancelled within 24 hours of purchase.&quot;
+]
+
+# We load a pre-trained sentence embedding model.
+#
+# all-MiniLM-L6-v2 is a compact model that creates embeddings for sentences.
+# It is often used for semantic search and similarity comparison.
+#
+# The model has already been trained, so we do not train it ourselves here.
+
+model = SentenceTransformer(&quot;all-MiniLM-L6-v2&quot;)
+
+# We convert every knowledge base answer into an embedding.
+#
+# After this step, each answer is represented as a vector of numbers.
+# These vectors allow the computer to compare the meanings of answers.
+
+kb_embeddings = model.encode(knowledge_base)</code></pre>
+<div class="output">/usr/local/lib/python3.12/dist-packages/huggingface_hub/utils/_auth.py:112: UserWarning: 
+The secret `HF_TOKEN` does not exist in your Colab secrets.
+To authenticate with the Hugging Face Hub, create a token in your settings tab (https://huggingface.co/settings/tokens), set it as secret in your Google Colab and restart your session.
+You will be able to reuse this secret in all of your notebooks.
+Please note that authentication is recommended but still optional to access public models or datasets.
+  warnings.warn(
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+WARNING:huggingface_hub.utils._http:Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+
+modules.json:   0%|          | 0.00/349 [00:00&lt;?, ?B/s]
+config_sentence_transformers.json:   0%|          | 0.00/116 [00:00&lt;?, ?B/s]
+README.md:   0%|          | 0.00/10.5k [00:00&lt;?, ?B/s]
+sentence_bert_config.json:   0%|          | 0.00/53.0 [00:00&lt;?, ?B/s]
+config.json:   0%|          | 0.00/612 [00:00&lt;?, ?B/s]
+model.safetensors:   0%|          | 0.00/90.9M [00:00&lt;?, ?B/s]
+Loading weights:   0%|          | 0/103 [00:00&lt;?, ?it/s]
+tokenizer_config.json:   0%|          | 0.00/350 [00:00&lt;?, ?B/s]
+vocab.txt:   0%|          | 0.00/232k [00:00&lt;?, ?B/s]
+tokenizer.json:   0%|          | 0.00/466k [00:00&lt;?, ?B/s]
+special_tokens_map.json:   0%|          | 0.00/112 [00:00&lt;?, ?B/s]
+config.json:   0%|          | 0.00/190 [00:00&lt;?, ?B/s]</div>
+</div>
+<div class="codecell"><pre><code># This is a new customer question.
+#
+# Notice that it includes the words &quot;package&quot; and &quot;broken&quot;,
+# but our knowledge base does not contain a perfect answer about damaged packages.
+#
+# This is useful for demonstrating that semantic search is not magic:
+# it will find the closest available answer, even if the knowledge base is incomplete.
+
+customer_question = &quot;My package arrived broken. What should I do?&quot;
+
+# We convert the customer question into an embedding,
+# using the same model that we used for the knowledge base.
+
+question_embedding = model.encode([customer_question])
+
+# We compare the question embedding with all knowledge base embeddings.
+#
+# The result is a list of similarity scores:
+# - one score for each knowledge base entry
+# - higher score means more similar meaning
+
+scores = cosine_similarity(question_embedding, kb_embeddings)[0]</code></pre>
+</div>
+<div class="codecell"><pre><code># We print the original customer question.
+
+print(f&quot;Customer question: {customer_question}\n&quot;)
+
+# We print the similarity score for each knowledge base entry.
+#
+# This makes the model&#x27;s retrieval process easier to understand:
+# participants can see why a particular answer was selected.
+
+print(&quot;Similarity to each knowledge base entry:\n&quot;)
+
+for i, (entry, score) in enumerate(zip(knowledge_base, scores)):
+
+    # This creates a simple text-based bar.
+    #
+    # The longer the bar, the higher the similarity score.
+    # It is only for visualization in the notebook output.
+
+    bar = &quot;█&quot; * int(score * 20)
+
+    # We print:
+    # - the number of the knowledge base entry
+    # - the similarity score rounded to two decimals
+    # - the visual bar
+    # - the answer text
+
+    print(f&quot;  [{i+1}] {score:.2f}  {bar}&quot;)
+    print(f&quot;       {entry}&quot;)
+
+# argmax() returns the index of the highest similarity score.
+#
+# This is the entry that the embedding-based chatbot considers the best match.
+
+best_match_index = scores.argmax()
+
+# We print the best matching answer and its score.
+
+print(f&quot;\nBest match [{best_match_index+1}]: {knowledge_base[best_match_index]}&quot;)
+print(f&quot; Similarity score: {round(scores[best_match_index], 2)}&quot;)</code></pre>
+<div class="output">Customer question: My package arrived broken. What should I do?
+
+Similarity to each knowledge base entry:
+
+  [1] 0.14  ██
+       Refunds are processed within 7 business days.
+  [2] 0.27  █████
+       Standard delivery takes 2-4 business days.
+  [3] 0.15  ██
+       Invoices are sent by email after payment confirmation.
+  [4] 0.19  ███
+       Premium customers receive priority support within 2 hours.
+  [5] 0.11  ██
+       Orders can be cancelled within 24 hours of purchase.
+
+Best match [2]: Standard delivery takes 2-4 business days.
+ Similarity score: 0.27000001072883606
+</div>
+</div>
+<div class="codecell"><pre><code># Important interpretation:
+#
+# The model selects the answer with the highest semantic similarity.
+# However, if the knowledge base does not contain a truly appropriate answer,
+# the model may still return the &quot;least bad&quot; option.
+#
+# This is why real chatbots need:
+# - a good knowledge base
+# - confidence thresholds
+# - fallback responses
+# - human escalation for unclear cases</code></pre>
+</div>
+<div class="markdown"><h1>Another example: comparing keyword matching and embedding search</h1>
+<p>This section compares two chatbot approaches side by side.</p></div>
+<div class="codecell"><pre><code># We define a function for a rule-based business chatbot.
+#
+# A function allows us to reuse the same keyword-matching logic
+# for many different customer questions.
+
+def business_chatbot(question):
+
+    # Convert the question to lowercase to make keyword matching case-insensitive.
+
+    question = question.lower()
+
+    # The chatbot checks manually defined conditions in sequence.
+    #
+    # If the question contains &quot;damaged&quot; or &quot;broken&quot;,
+    # it returns an answer about damaged products.
+
+    if &quot;damaged&quot; in question or &quot;broken&quot; in question:
+        return &quot;Please report the damaged product using the complaint form.&quot;
+
+    # If the question contains &quot;refund&quot;,
+    # it returns the refund-related answer.
+
+    elif &quot;refund&quot; in question:
+        return &quot;Refunds are processed within 7 business days.&quot;
+
+    # If the question contains &quot;premium&quot;,
+    # it returns the premium-support answer.
+
+    elif &quot;premium&quot; in question:
+        return &quot;Premium customers receive priority support within 2 hours.&quot;
+
+    # If the question contains &quot;invoice&quot;,
+    # it returns the invoice-related answer.
+
+    elif &quot;invoice&quot; in question:
+        return &quot;Invoices are sent by email after payment confirmation.&quot;
+
+    # If none of the above keywords appear,
+    # the chatbot uses a generic fallback message.
+
+    else:
+        return &quot;I do not have enough information to answer this question.&quot;
+
+
+# These are test questions used to compare both approaches.
+#
+# Some questions contain exact keywords.
+# One question uses different wording and intentionally does not match the keyword rules.
+
+questions = [
+    &quot;My product arrived broken. What should I do?&quot;,
+    &quot;When will I receive my refund?&quot;,
+    &quot;I am a premium customer. How fast is support?&quot;,
+    &quot;Where can I download my invoice?&quot;,
+    &quot;When will my package arrive?&quot;   # intentional no-match for keyword bot; semantically related to delivery
+]</code></pre>
+</div>
+<div class="codecell"><pre><code># We compare the rule-based chatbot with the embedding-based search.
+#
+# For each customer question:
+# 1. The keyword chatbot tries to answer using manually defined rules.
+# 2. The embedding approach converts the question into a vector.
+# 3. The embedding approach compares the question with all knowledge base answers.
+# 4. The most similar answer is selected.
+
+print(&quot;Keyword-based chatbot vs. embedding search\n&quot;)
+
+for q in questions:
+
+    # First, get the answer from the rule-based chatbot.
+
+    keyword_answer = business_chatbot(q)
+
+    # Next, convert the current customer question into an embedding.
+
+    q_emb = model.encode([q])
+
+    # Compare this question embedding with all knowledge base embeddings.
+
+    s = cosine_similarity(q_emb, kb_embeddings)[0]
+
+    # Select the answer with the highest similarity score.
+
+    embedding_answer = knowledge_base[s.argmax()]
+
+    # Store the highest similarity score.
+    #
+    # This score helps us evaluate how confident the embedding match may be.
+
+    match_score = round(s.max(), 2)
+
+    # Print both answers so participants can compare them.
+
+    print(f&quot; {q}&quot;)
+    print(f&quot;  Keyword bot : {keyword_answer}&quot;)
+    print(f&quot;  Embedding   : {embedding_answer}  (score: {match_score})&quot;)
+    print()</code></pre>
+<div class="output">Keyword-based chatbot vs. embedding search
+
+ My product arrived broken. What should I do?
+  Keyword bot : Please report the damaged product using the complaint form.
+  Embedding   : Premium customers receive priority support within 2 hours.  (score: 0.20000000298023224)
+
+ When will I receive my refund?
+  Keyword bot : Refunds are processed within 7 business days.
+  Embedding   : Refunds are processed within 7 business days.  (score: 0.7099999785423279)
+
+ I am a premium customer. How fast is support?
+  Keyword bot : Premium customers receive priority support within 2 hours.
+  Embedding   : Premium customers receive priority support within 2 hours.  (score: 0.7699999809265137)
+
+ Where can I download my invoice?
+  Keyword bot : Invoices are sent by email after payment confirmation.
+  Embedding   : Invoices are sent by email after payment confirmation.  (score: 0.5799999833106995)
+
+ When will my package arrive?
+  Keyword bot : I do not have enough information to answer this question.
+  Embedding   : Standard delivery takes 2-4 business days.  (score: 0.550000011920929)
+
+</div>
+</div>
+<div class="markdown"><h1>Discussion</h1>
+<p>Which approach handled better the question: **&quot;When will my package arrive?&quot;**</p>
+
+<p>The keyword bot returns a fallback because it does not find the exact word **delivery**.  </p>
+<p>The embedding model can connect **package arrive** with the meaning of delivery.</p></div>
+<div class="markdown"><h2>TASK: Improving a Business Chatbot</h2>
+
+<p>Work in small groups.</p>
+
+<p>Imagine you are building a chatbot for an online store.</p>
+
+<h3>Step 1</h3>
+<p>Add 3 new questions and answers to the knowledge base.</p>
+
+<h3>Step 2</h3>
+<p>Create 5 customer questions that use different wording than the knowledge base.</p>
+
+<h3>Step 3</h3>
+<p>Test both approaches:</p>
+
+<p>- Keyword-based chatbot</p>
+<p>- Embedding-based chatbot</p>
+
+<h3>Discussion</h3>
+
+<p>1. Which questions were handled better by the embedding-based chatbot?</p>
+<p>2. Which questions were difficult for both approaches?</p>
+<p>3. What are the main advantages of keyword matching?</p>
+<p>4. What are the main advantages of embeddings?</p>
+<p>5. Which approach would you choose for a real customer-service chatbot and why?</p></div>
+</body></html>
